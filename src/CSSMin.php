@@ -437,6 +437,45 @@ class CSSMin {
 		// The full URL possibly with query, as passed to the 'url()' value in CSS
 		$url = $file . $query;
 
+		// WGL start - Implement filepath: URL scheme for long-term cached image usage in CSS.
+		// i.e. filepath://Wiki.png?width=30
+		$parsedUrl = parse_url( $url );
+		if ( is_array( $parsedUrl ) && isset( $parsedUrl['scheme'] ) && $parsedUrl['scheme'] == 'filepath' ) {
+			if ( isset( $parsedUrl['host'] ) ) {
+				$name = rawurldecode( parse_url( $url, PHP_URL_HOST ) );
+
+				$width = -1;
+				if ( isset( $parsedUrl['query'] ) ) {
+					$opts = wfCgiToArray( $parsedUrl['query'] );
+					$width = (int) ( $opts['width'] ?? $opts['w'] ?? -1 );
+				}
+
+				// Handles non-existing files by returning the non-cached path where the file would exist.
+				$file = wfLocalFile( $name );
+
+				// Handle bad file name.
+				if ( !$file ) {
+					return '';
+				}
+
+				// Non-thumbnail URL.
+				$url = $file->getUrl();
+
+				// If a width is requested.
+				if ( $width != -1 ) {
+					$mto = $file->transform( [ 'width' => $width ] );
+					// ... and we can
+					if ( $mto && !$mto->isError() ) {
+						// ... change the URL to point to a thumbnail.
+						$url = $mto->getUrl();
+					}
+				}
+
+				return $url;
+			}
+		}
+		// WGL end.
+
 		// Expand local URLs with absolute paths to a full URL (possibly protocol-relative).
 		if ( self::isLocalUrl( $url ) ) {
 			return self::resolveUrl( $remote, $url );

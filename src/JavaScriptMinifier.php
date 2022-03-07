@@ -111,7 +111,7 @@ class JavaScriptMinifier {
 	private const ACTION_PUSH = 202; // Push a state to the stack
 	private const ACTION_POP = 203; // Pop the state from the top of the stack, and go to that state
 
-	// Sanity limit to avoid excessive memory usage
+	// Limit to avoid excessive memory usage
 	private const STACK_LIMIT = 1000;
 
 	// Length of the longest token in $tokenTypes made of punctuation characters,
@@ -1247,6 +1247,52 @@ class JavaScriptMinifier {
 	 * @return string|bool Minified code or false on failure
 	 */
 	public static function minify( $s ) {
+		return self::minifyInternal( $s );
+	}
+
+	/**
+	 * Create a minifier state object without source map capabilities
+	 *
+	 * Example:
+	 *
+	 *   JavaScriptMinifier::createMinifier()
+	 *     ->addSourceFile( 'file.js', $source )
+	 *     ->getMinifiedOutput();
+	 *
+	 * @return JavaScriptMinifierState
+	 */
+	public static function createMinifier() {
+		return new JavaScriptMinifierState;
+	}
+
+	/**
+	 * Create a minifier state object with source map capabilities
+	 *
+	 * Example:
+	 *
+	 *   $mapper = JavaScriptMinifier::createSourceMapState()
+	 *     ->addSourceFile( 'file1.js', $source1 )
+	 *     ->addOutput( "\n\n" )
+	 *     ->addSourceFile( 'file2.js', $source2 );
+	 *   $out = $mapper->getMinifiedOutput();
+	 *   $map = $mapper->getSourceMap()
+	 *
+	 * @return JavaScriptMapperState
+	 */
+	public static function createSourceMapState() {
+		return new JavaScriptMapperState;
+	}
+
+	/**
+	 * Minify with optional source map.
+	 *
+	 * @internal
+	 *
+	 * @param string $s
+	 * @param MappingsGenerator|null $mapGenerator
+	 * @return bool|string
+	 */
+	public static function minifyInternal( $s, $mapGenerator = null ) {
 		self::ensureExpandedStates();
 
 		// Here's where the minifying takes place: Loop through the input, looking for tokens
@@ -1278,6 +1324,9 @@ class JavaScriptMinifier {
 				if ( !$newlineFound && strcspn( $s, "\r\n", $pos, $skip ) !== $skip ) {
 					$newlineFound = true;
 				}
+				if ( $mapGenerator ) {
+					$mapGenerator->consumeSource( $skip );
+				}
 				$pos += $skip;
 				continue;
 			}
@@ -1289,7 +1338,11 @@ class JavaScriptMinifier {
 				|| ( $ch === '<' && substr( $s, $pos, 4 ) === '<!--' )
 				|| ( $ch === '-' && $newlineFound && substr( $s, $pos, 3 ) === '-->' )
 			) {
-				$pos += strcspn( $s, "\r\n", $pos );
+				$skip = strcspn( $s, "\r\n", $pos );
+				if ( $mapGenerator ) {
+					$mapGenerator->consumeSource( $skip );
+				}
+				$pos += $skip;
 				continue;
 			}
 
@@ -1322,7 +1375,8 @@ class JavaScriptMinifier {
 					$end--;
 				}
 
-			// Handle template strings: beginning (`) or continuation after a ${ expression (} + tail state)
+			// Handle template strings, either from "`" to begin a new string,
+			// or continuation after the "}" that ends a "${"-expression.
 			} elseif ( $ch === '`' || ( $ch === '}' && $topOfStack === self::TEMPLATE_STRING_TAIL ) ) {
 				if ( $ch === '}' ) {
 					// Pop the TEMPLATE_STRING_TAIL state off the stack
@@ -1337,6 +1391,13 @@ class JavaScriptMinifier {
 				// and $ characters followed by something other than { or `
 				do {
 					$end += strcspn( $s, '`$\\', $end ) + 1;
+					if ( $end - 1 < $length && $s[$end - 1] === '`' ) {
+						// End of the string, stop
+						// We don't do this in the while() condition because the $end++ in the
+						// backslash escape branch makes it difficult to do so without incorrectly
+						// considering an escaped backtick (\`) the end of the string
+						break;
+					}
 					if ( $end - 1 < $length && $s[$end - 1] === '\\' ) {
 						// Backslash escape. Skip the next character, and keep going
 						$end++;
@@ -1355,9 +1416,9 @@ class JavaScriptMinifier {
 						$state = self::TEMPLATE_STRING_HEAD;
 						break;
 					}
-				} while ( $end - 1 < $length && $s[$end - 1] !== '`' );
+				} while ( $end - 1 < $length );
 				if ( $end > $length ) {
-					// Loop wrongly assumed an end quote ended the search,
+					// Loop wrongly assumed an end quote or ${ ended the search,
 					// but search ended because we've reached the end. Correct $end.
 					// TODO: This is invalid and should throw.
 					$end--;
@@ -1491,10 +1552,11 @@ class JavaScriptMinifier {
 				$type = $state < 0 ? self::TYPE_RETURN : self::TYPE_LITERAL;
 			}
 
+			$pad = '';
 			if ( $newlineFound && isset( self::$semicolon[$state][$type] ) ) {
 				// This token triggers the semicolon insertion mechanism of javascript. While we
 				// could add the ; token here ourselves, keeping the newline has a few advantages.
-				$out .= "\n";
+				$pad = "\n";
 				$state = $state < 0 ? -self::STATEMENT : self::STATEMENT;
 				$lineLength = 0;
 			} elseif ( $lineLength + $end - $pos > self::$maxLineLength &&
@@ -1506,18 +1568,24 @@ class JavaScriptMinifier {
 				// Only do this if it won't trigger semicolon insertion and if it won't
 				// put a postfix increment operator or an arrow on its own line,
 				// which is illegal in js.
-				$out .= "\n";
+				$pad = "\n";
 				$lineLength = 0;
 			// Check, whether we have to separate the token from the last one with whitespace
 			} elseif ( !isset( self::$opChars[$last] ) && !isset( self::$opChars[$ch] ) ) {
-				$out .= ' ';
+				$pad = ' ';
 				$lineLength++;
 			// Don't accidentally create ++, -- or // tokens
 			} elseif ( $last === $ch && ( $ch === '+' || $ch === '-' || $ch === '/' ) ) {
-				$out .= ' ';
+				$pad = ' ';
 				$lineLength++;
 			}
 
+			if ( $mapGenerator ) {
+				$mapGenerator->outputSpace( $pad );
+				$mapGenerator->outputToken( $token );
+				$mapGenerator->consumeSource( $end - $pos );
+			}
+			$out .= $pad;
 			$out .= $token;
 			$lineLength += $end - $pos; // += strlen( $token )
 			$last = $s[$end - 1];

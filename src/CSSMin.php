@@ -20,6 +20,7 @@
 
 namespace Wikimedia\Minify;
 
+use MediaWiki\MediaWikiServices;
 use Net_URL2;
 
 /**
@@ -451,7 +452,7 @@ class CSSMin {
 				}
 
 				// Handles non-existing files by returning the non-cached path where the file would exist.
-				$file = wfLocalFile( $name );
+				$file = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->newFile( $name );
 
 				// Handle bad file name.
 				if ( !$file ) {

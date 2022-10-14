@@ -184,13 +184,11 @@ class CSSMin {
 			$encoded = preg_replace( '/ {2,}/', ' ', $encoded );
 			// Remove leading and trailing spaces
 			$encoded = trim( $encoded, ' ' );
-			$uri = 'data:' . $type . ',' . $encoded;
-			return $uri;
+			return 'data:' . $type . ',' . $encoded;
 		}
 
 		// Try #2: Encoded data URI
-		$uri = 'data:' . $type . ';base64,' . base64_encode( $contents );
-		return $uri;
+		return 'data:' . $type . ';base64,' . base64_encode( $contents );
 	}
 
 	/**
@@ -340,11 +338,9 @@ class CSSMin {
 
 		// Re-insert comments
 		$pattern = '/' . self::PLACEHOLDER . '(\d+)x/';
-		$source = preg_replace_callback( $pattern, static function ( $match ) use ( &$comments ) {
+		return preg_replace_callback( $pattern, static function ( $match ) use ( &$comments ) {
 			return $comments[ $match[1] ];
 		}, $source );
-
-		return $source;
 	}
 
 	/**
@@ -482,7 +478,7 @@ class CSSMin {
 			return self::resolveUrl( $remote, $url );
 		}
 
-		// Pass thru fully-qualified and protocol-relative URLs and data URIs, as well as local URLs if
+		// Pass through fully-qualified and protocol-relative URLs and data URIs, as well as local URLs if
 		// we can't expand them.
 		// Also skips anchors or the rare `behavior` property specifying application's default behavior
 		if (

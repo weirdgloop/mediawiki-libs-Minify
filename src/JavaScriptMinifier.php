@@ -25,6 +25,8 @@
 
 namespace Wikimedia\Minify;
 
+use ReflectionClass;
+
 /**
  * JavaScript Minifier
  *
@@ -41,7 +43,7 @@ namespace Wikimedia\Minify;
  * output.
  *
  * This class has limited support for 8.0 spec ("ECMAScript 2017"), specifically, the await
- * keyword and most kinds of async functions are implemented. Other new parsing features of ES2017
+ * keyword, and most kinds of async functions are implemented. Other new parsing features of ES2017
  * are not yet supported.
  *
  * See also:
@@ -91,43 +93,99 @@ class JavaScriptMinifier {
 	private const PAREN_EXPRESSION_OP_NO_NL     = 28;
 
 	/* Token types */
-	private const TYPE_UN_OP         = 101; // unary operators
-	private const TYPE_INCR_OP       = 102; // ++ and --
-	private const TYPE_BIN_OP        = 103; // binary operators (except .)
-	private const TYPE_ADD_OP        = 104; // + and - which can be either unary or binary ops
-	private const TYPE_DOT           = 105; // .
-	private const TYPE_HOOK          = 106; // ?
-	private const TYPE_COLON         = 107; // :
-	private const TYPE_COMMA         = 108; // ,
-	private const TYPE_SEMICOLON     = 109; // ;
-	private const TYPE_BRACE_OPEN    = 110; // {
-	private const TYPE_BRACE_CLOSE   = 111; // }
-	private const TYPE_PAREN_OPEN    = 112; // ( and [
-	private const TYPE_PAREN_CLOSE   = 113; // ) and ]
-	private const TYPE_ARROW         = 114; // =>
-	private const TYPE_RETURN        = 115; // keywords: break, continue, return, throw
-	private const TYPE_IF            = 116; // keywords: catch, for, with, switch, while, if
-	private const TYPE_DO            = 117; // keywords: case, finally, else, do, try
-	private const TYPE_VAR           = 118; // keywords: var, let, const
-	private const TYPE_YIELD         = 119; // keywords: yield
-	private const TYPE_FUNC          = 120; // keywords: function
-	private const TYPE_CLASS         = 121; // keywords: class
-	private const TYPE_LITERAL       = 122; // all literals, identifiers, unrecognised tokens, and other keywords
-	private const TYPE_SPECIAL       = 123; // For special treatment of tokens that usually mean something else
-	private const TYPE_ASYNC         = 124; // keywords: async
-	private const TYPE_AWAIT         = 125; // keywords: await
 
-	private const ACTION_GOTO = 201; // Go to another state
-	private const ACTION_PUSH = 202; // Push a state to the stack
-	private const ACTION_POP = 203; // Pop the state from the top of the stack, and go to that state
+	/** @var int unary operators */
+	private const TYPE_UN_OP = 101;
 
-	// Limit to avoid excessive memory usage
+	/** @var int ++ and -- */
+	private const TYPE_INCR_OP = 102;
+
+	/** @var int binary operators (except .) */
+	private const TYPE_BIN_OP = 103;
+
+	/** @var int + and - which can be either unary or binary ops */
+	private const TYPE_ADD_OP = 104;
+
+	/** @var int . */
+	private const TYPE_DOT = 105;
+
+	/** @var int ? */
+	private const TYPE_HOOK = 106;
+
+	/** @var int : */
+	private const TYPE_COLON = 107;
+
+	/** @var int , */
+	private const TYPE_COMMA = 108;
+
+	/** @var int ; */
+	private const TYPE_SEMICOLON = 109;
+
+	/** @var int { */
+	private const TYPE_BRACE_OPEN = 110;
+
+	/** @var int } */
+	private const TYPE_BRACE_CLOSE = 111;
+
+	/** @var int ( and [ */
+	private const TYPE_PAREN_OPEN = 112;
+
+	/** @var int ) and ] */
+	private const TYPE_PAREN_CLOSE = 113;
+
+	/** @var int => */
+	private const TYPE_ARROW = 114;
+
+	/** @var int keywords: break, continue, return, throw */
+	private const TYPE_RETURN = 115;
+
+	/** @var int keywords: catch, for, with, switch, while, if */
+	private const TYPE_IF = 116;
+
+	/** @var int keywords: case, finally, else, do, try */
+	private const TYPE_DO = 117;
+
+	/** @var int keywords: var, let, const */
+	private const TYPE_VAR = 118;
+
+	/** @var int keywords: yield */
+	private const TYPE_YIELD = 119;
+
+	/** @var int keywords: function */
+	private const TYPE_FUNC = 120;
+
+	/** @var int keywords: class */
+	private const TYPE_CLASS = 121;
+
+	/** @var int all literals, identifiers, unrecognised tokens, and other keywords */
+	private const TYPE_LITERAL = 122;
+
+	/** @var int For special treatment of tokens that usually mean something else */
+	private const TYPE_SPECIAL = 123;
+
+	/** @var int keywords: async */
+	private const TYPE_ASYNC = 124;
+
+	/** @var int keywords: await */
+	private const TYPE_AWAIT = 125;
+
+	/** @var int Go to another state */
+	private const ACTION_GOTO = 201;
+
+	/** @var int Push a state to the stack */
+	private const ACTION_PUSH = 202;
+
+	/** @var int Pop the state from the top of the stack, and go to that state */
+	private const ACTION_POP = 203;
+
+	/** @var int Limit to avoid excessive memory usage */
 	private const STACK_LIMIT = 1000;
 
-	// Length of the longest token in $tokenTypes made of punctuation characters,
-	// as defined in $opChars. Update this if you add longer tokens to $tokenTypes.
-	//
-	// Currently the longest punctuation token is `>>>=`, which is 4 characters.
+	/** Length of the longest token in $tokenTypes made of punctuation characters,
+	 * as defined in $opChars. Update this if you add longer tokens to $tokenTypes.
+	 *
+	 * Currently, the longest punctuation token is `>>>=`, which is 4 characters.
+	 */
 	private const LONGEST_PUNCTUATION_TOKEN = 4;
 
 	/**
@@ -144,7 +202,7 @@ class JavaScriptMinifier {
 	 */
 	private static $maxLineLength = 1000;
 
-	private static $expandedStates = false;
+	private static bool $expandedStates = false;
 
 	/**
 	 * @var array $opChars
@@ -1299,20 +1357,26 @@ class JavaScriptMinifier {
 		// These negative states represent states inside generator functions. When in these states,
 		// TYPE_YIELD is treated as TYPE_RETURN, otherwise as TYPE_LITERAL
 		foreach ( self::$model as $state => $transitions ) {
-			if ( $state !== self::FUNC && $state !== self::GENFUNC ) {
-				foreach ( $transitions as $tokenType => $actions ) {
-					foreach ( $actions as $action => $target ) {
-						if ( is_array( $target ) ) {
-							foreach ( $target as $subaction => $subtarget ) {
-								self::$model[-$state][$tokenType][$action][$subaction] =
-									$subtarget === self::FUNC || $subtarget === true || $subtarget === self::GENFUNC
-									? $subtarget : -$subtarget;
-							}
-						} else {
-							self::$model[-$state][$tokenType][$action] =
-								$target === self::FUNC || $target === true || $target === self::GENFUNC
-								? $target : -$target;
-						}
+			if ( $state === self::FUNC || $state === self::GENFUNC ) {
+				continue;
+			}
+			foreach ( $transitions as $tokenType => $actions ) {
+				foreach ( $actions as $action => $target ) {
+					if ( !is_array( $target ) ) {
+						self::$model[-$state][$tokenType][$action] = (
+							$target === self::FUNC ||
+							$target === true ||
+							$target === self::GENFUNC
+						) ? $target : -$target;
+						continue;
+					}
+
+					foreach ( $target as $subaction => $subtarget ) {
+						self::$model[-$state][$tokenType][$action][$subaction] = (
+							$subtarget === self::FUNC ||
+							$subtarget === true ||
+							$subtarget === self::GENFUNC
+						) ? $subtarget : -$subtarget;
 					}
 				}
 			}
@@ -1409,8 +1473,10 @@ class JavaScriptMinifier {
 		$newlineFound = true;
 		$state = self::STATEMENT;
 		$stack = [];
-		$topOfStack = null; // Optimization: calling end( $stack ) repeatedly is expensive
-		$last = ';'; // Pretend that we have seen a semicolon yet
+		// Optimization: calling end( $stack ) repeatedly is expensive
+		$topOfStack = null;
+		// Pretend that we have seen a semicolon yet
+		$last = ';';
 		while ( $pos < $length ) {
 			// First, skip over any whitespace and multiline comments, recording whether we
 			// found any newline character
@@ -1582,7 +1648,8 @@ class JavaScriptMinifier {
 				&& ( $pos + 1 < $length ) && ( $s[$pos + 1] === 'x' || $s[$pos + 1] === 'X' )
 			) {
 				// Hex numeric literal
-				$end++; // x or X
+				// x or X
+				$end++;
 				$len = strspn( $s, '0123456789ABCDEFabcdef', $end );
 				if ( !$len && !$error ) {
 					$error = new ParseError(
@@ -1647,7 +1714,8 @@ class JavaScriptMinifier {
 			}
 
 			// Now get the token type from our type array
-			$token = substr( $s, $pos, $end - $pos ); // so $end - $pos == strlen( $token )
+			// so $end - $pos == strlen( $token )
+			$token = substr( $s, $pos, $end - $pos );
 			$type = isset( self::$model[$state][self::TYPE_SPECIAL][$token] )
 				? self::TYPE_SPECIAL
 				: self::$tokenTypes[$token] ?? self::TYPE_LITERAL;
@@ -1700,7 +1768,7 @@ class JavaScriptMinifier {
 			}
 			$out .= $pad;
 			$out .= $token;
-			$lineLength += $end - $pos; // += strlen( $token )
+			$lineLength += $end - $pos;
 			$last = $s[$end - 1];
 			$pos = $end;
 			$newlineFound = false;
@@ -1743,8 +1811,7 @@ class JavaScriptMinifier {
 		int $state, string $ch, string $token, int $type
 	) {
 		static $first = true;
-		$self = new \ReflectionClass( self::class );
-		$constants = $self->getConstants();
+		$self = new ReflectionClass( self::class );
 
 		foreach ( $self->getConstants() as $name => $value ) {
 			if ( $value === $top ) {

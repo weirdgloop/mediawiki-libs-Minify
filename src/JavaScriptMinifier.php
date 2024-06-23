@@ -47,6 +47,7 @@ use ReflectionClass;
  * are not yet supported.
  *
  * See also:
+ * - <https://262.ecma-international.org/11.0/>
  * - <https://262.ecma-international.org/8.0/>
  * - <https://262.ecma-international.org/7.0/>
  * - <https://262.ecma-international.org/6.0/>
@@ -299,6 +300,8 @@ class JavaScriptMinifier {
 		// ECMAScript 6.0 § 12.12 Binary Logical Operators
 		'&&'         => self::TYPE_BIN_OP,
 		'||'         => self::TYPE_BIN_OP,
+		// ECMAScript 11.0 § 12.13 Binary Logical Operators
+		'??'         => self::TYPE_BIN_OP,
 		// ECMAScript 6.0 § 12.13 Conditional Operator
 		// Also known as ternary.
 		'?'          => self::TYPE_HOOK,
@@ -428,6 +431,7 @@ class JavaScriptMinifier {
 		// async [no LineTerminator here] function ...
 		// async [no LineTerminator here] propertyName() ...
 		'async'      => self::TYPE_ASYNC,
+
 	];
 
 	/**
@@ -1399,7 +1403,7 @@ class JavaScriptMinifier {
 	 *
 	 * @see MinifierState::setErrorHandler
 	 * @param string $s JavaScript code to minify
-	 * @param callable|null $onError Called with a ParserError object
+	 * @param callable|null $onError Called with a ParseError object
 	 * @return string Minified code
 	 */
 	public static function minify( $s, $onError = null ) {

@@ -447,6 +447,9 @@ class JavaScriptMinifier {
 		'switch'     => self::TYPE_IF,
 		'catch'      => self::TYPE_IF,
 
+		// ECMAScript 8.0 § 13.7.5 The for-of Statement
+		'of'         => self::TYPE_BIN_OP,
+
 		// The keywords followed by a Statement, Expression, or Block.
 		//
 		//     keyword Statement
@@ -2219,14 +2222,18 @@ class JavaScriptMinifier {
 		$self = new ReflectionClass( self::class );
 		foreach ( $self->getConstants() as $name => $value ) {
 			foreach ( $context['stack'] as $i => $state ) {
-				if ( $value === $state ) {
+				if ( $state === $value ) {
 					$context['stack'][$i] = $name;
+				} elseif ( $state === -$value ) {
+					$context['stack'][$i] = '-' . $name;
 				}
 			}
-			if ( $value === $context['state'] ) {
+			if ( $context['state'] === $value ) {
 				$context['state'] = $name;
+			} elseif ( $context['state'] === -$value ) {
+				$context['state'] = '-' . $name;
 			}
-			if ( $value === $context['type'] ) {
+			if ( $context['type'] === $value ) {
 				$context['type'] = $name;
 			}
 		}

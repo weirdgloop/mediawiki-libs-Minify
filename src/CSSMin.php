@@ -99,7 +99,7 @@ class CSSMin {
 
 				// Skip fully-qualified and protocol-relative URLs and data URIs
 				if (
-					strpos( $url, '//' ) === 0 ||
+					str_starts_with( $url, '//' ) ||
 					parse_url( $url, PHP_URL_SCHEME )
 				) {
 					break;
@@ -357,7 +357,7 @@ class CSSMin {
 	 * @return bool
 	 */
 	protected static function isRemoteUrl( $maybeUrl ) {
-		return strpos( $maybeUrl, '//' ) === 0 || parse_url( $maybeUrl, PHP_URL_SCHEME );
+		return str_starts_with( $maybeUrl, '//' ) || parse_url( $maybeUrl, PHP_URL_SCHEME );
 	}
 
 	/**
@@ -411,7 +411,7 @@ class CSSMin {
 			$base = "https://placeholder.invalid$base";
 		}
 		// Net_URL2::resolve() doesn't allow for protocol-relative URLs, but we want to.
-		$isProtoRelative = strpos( $base, '//' ) === 0;
+		$isProtoRelative = str_starts_with( $base, '//' );
 		if ( $isProtoRelative ) {
 			$base = "https:$base";
 		}

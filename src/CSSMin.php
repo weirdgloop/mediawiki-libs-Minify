@@ -455,8 +455,10 @@ class CSSMin {
 					$width = (int) ( $opts['width'] ?? $opts['w'] ?? -1 );
 				}
 
-				// Handles non-existing files by returning the non-cached path where the file would exist.
-				$file = MediaWikiServices::getInstance()->getRepoGroup()->getLocalRepo()->newFile( $name );
+				// findFile handles file repositories and redirects. But if it fails, fall back onto newFile and use the
+				// non-cached path where the file would exist.
+				$repoGroup = MediaWikiServices::getInstance()->getRepoGroup();
+				$file = $repoGroup->findFile( $name ) ?: $repoGroup->getLocalRepo()->newFile( $name );
 
 				// Handle bad file name.
 				if ( !$file ) {

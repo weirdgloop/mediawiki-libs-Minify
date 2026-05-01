@@ -458,6 +458,17 @@ JAVASCRIPT
 			[ "export { 'not an id' as alias } from 'thingy';", "export{'not an id'as alias}from'thingy';" ],
 			// ES2022 top-level await
 			[ "await import( 'thingy' );", "await import('thingy');" ],
+			// ES2025 import/export with attributes
+			[ "export * from 'styles' with { type: 'css' };", "export*from'styles'with{type:'css'};" ],
+			[
+				"import styles from 'styles' with { type: 'css', 'resolution-mode': 'import' };",
+				"import styles from'styles'with{type:'css','resolution-mode':'import'};"
+			],
+			[
+				"import config from './config.json' with { type: 'json' }; console.log( config.enabled );",
+				"import config from'./config.json'with{type:'json'};console.log(config.enabled);"
+			],
+
 			// Semicolon insertion before import/export
 			[ "( x, y ) => { return x + y; }\nexport class Foo {}", "(x,y)=>{return x+y;}\nexport class Foo{}" ],
 			[ "let x = y + 3\nimport Foo from 'thingy';", "let x=y+3\nimport Foo from'thingy';" ],
@@ -726,6 +737,30 @@ JAVASCRIPT
 			[
 				"let match = /(?<year>\\d{4})/d.exec( value );",
 				"let match=/(?<year>\\d{4})/d.exec(value);"
+			],
+			// ES2023 hashbang comments
+			[
+				"#!/usr/bin/env node\nconsole.log( 'ok' );",
+				"#!/usr/bin/env node\nconsole.log('ok');"
+			],
+			[
+				"#!/usr/bin/env node\r\nconsole.log( 'ok' );",
+				"#!/usr/bin/env node\nconsole.log('ok');"
+			],
+			// ES2024 RegExp v flag
+			[
+				"let emoji = /[\\p{RGI_Emoji}&&\\p{ASCII}]/v.test( value );",
+				"let emoji=/[\\p{RGI_Emoji}&&\\p{ASCII}]/v.test(value);"
+			],
+			// ES2025 RegExp modifiers
+			[
+				"let match = /(?i:hello)-(?-i:world)/.exec( value );",
+				"let match=/(?i:hello)-(?-i:world)/.exec(value);"
+			],
+			// ES2025 duplicate named capture groups
+			[
+				"let match = /(?<year>\\d{4})-\\d{2}|\\d{2}-(?<year>\\d{4})/.exec( value );",
+				"let match=/(?<year>\\d{4})-\\d{2}|\\d{2}-(?<year>\\d{4})/.exec(value);"
 			],
 		];
 	}

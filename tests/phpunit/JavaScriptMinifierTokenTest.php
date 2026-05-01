@@ -267,6 +267,17 @@ class JavaScriptMinifierTokenTest extends TestCase {
 					}
 					$expected[] = [ 'type' => 'TYPE_SPECIAL', 'token' => 'from' ];
 					$traverse( $node->getSource(), $node );
+					if ( $node->getAttributes() ) {
+						$expected[] = [ 'type' => 'TYPE_IF', 'token' => 'with' ];
+						$expected[] = [ 'type' => 'TYPE_BRACE_OPEN', 'token' => '{' ];
+						foreach ( $node->getAttributes() as $i => $attribute ) {
+							if ( $i !== 0 ) {
+								$expected[] = [ 'type' => 'TYPE_COMMA', 'token' => ',' ];
+							}
+							$traverse( $attribute, $node );
+						}
+						$expected[] = [ 'type' => 'TYPE_BRACE_CLOSE', 'token' => '}' ];
+					}
 					return Traverser::DONT_TRAVERSE_CHILD_NODES;
 				case 'ExportDefaultDeclaration':
 					$expected[] = [ 'type' => $getModuleDeclarationTokenType( $node ), 'token' => 'export' ];
@@ -387,6 +398,11 @@ class JavaScriptMinifierTokenTest extends TestCase {
 					][$rawName] ?? 'TYPE_LITERAL';
 					$expected[] = [ 'type' => $nodeType, 'token' => $rawName ];
 					return Traverser::DONT_TRAVERSE_CHILD_NODES;
+				case 'ImportAttribute':
+					$traverse( $node->getKey(), $node );
+					$expected[] = [ 'type' => 'TYPE_COLON', 'token' => ':' ];
+					$traverse( $node->getValue(), $node );
+					return Traverser::DONT_TRAVERSE_CHILD_NODES;
 				case 'ImportDeclaration':
 					$moduleDeclarationTokenType = $getModuleDeclarationTokenType( $node );
 					$expected[] = [ 'type' => $moduleDeclarationTokenType, 'token' => 'import' ];
@@ -437,6 +453,17 @@ class JavaScriptMinifierTokenTest extends TestCase {
 						$expected[] = [ 'type' => $moduleDeclarationTokenType, 'token' => 'from' ];
 					}
 					$traverse( $node->getSource(), $node );
+					if ( $node->getAttributes() ) {
+						$expected[] = [ 'type' => 'TYPE_IF', 'token' => 'with' ];
+						$expected[] = [ 'type' => 'TYPE_BRACE_OPEN', 'token' => '{' ];
+						foreach ( $node->getAttributes() as $i => $attribute ) {
+							if ( $i !== 0 ) {
+								$expected[] = [ 'type' => 'TYPE_COMMA', 'token' => ',' ];
+							}
+							$traverse( $attribute, $node );
+						}
+						$expected[] = [ 'type' => 'TYPE_BRACE_CLOSE', 'token' => '}' ];
+					}
 					return Traverser::DONT_TRAVERSE_CHILD_NODES;
 				case 'ImportDefaultSpecifier':
 					$traverse( $node->getLocal(), $node );

@@ -449,7 +449,18 @@ class CSSMin {
 		$parsedUrl = parse_url( $url );
 		if ( is_array( $parsedUrl ) && isset( $parsedUrl['scheme'] ) && $parsedUrl['scheme'] == 'filepath' ) {
 			if ( isset( $parsedUrl['host'] ) ) {
-				$name = rawurldecode( parse_url( $url, PHP_URL_HOST ) );
+				// Reconstruct the file name from parse_url's output (names like 'Wiki@light.png' get treated as HTTP
+				// auth credentials - WG-419)
+				$name = $parsedUrl['host'];
+				if ( isset( $parsedUrl['user'] ) ) {
+					if ( isset( $parsedUrl['pass'] ) ) {
+						$name = "{$parsedUrl['user']}:{$parsedUrl['pass']}@$name";
+					} else {
+						$name = "{$parsedUrl['user']}@$name";
+					}
+				}
+
+				$name = rawurldecode( $name );
 
 				$width = -1;
 				if ( isset( $parsedUrl['query'] ) ) {

@@ -1,7 +1,9 @@
 <?php
+declare( strict_types = 1 );
 
 use Peast\Peast;
 use Peast\Syntax\Exception as PeastSyntaxException;
+use Peast\Syntax\Node\BigIntLiteral;
 use Peast\Traverser;
 use PHPUnit\Framework\TestCase;
 use Wikimedia\Minify\JavaScriptMinifier;
@@ -104,7 +106,7 @@ class JavaScriptMinifierTokenTest extends TestCase {
 		$expected = [];
 		$genFnStack = [];
 
-		$traverse = static function ( $node, $parent ) use ( &$traverse, &$expected, &$genFnStack ) {
+		$traverse = static function ( $node, $parent ) use ( $code, &$traverse, &$expected, &$genFnStack ) {
 			if ( !$node ) {
 				return;
 			}
@@ -118,6 +120,7 @@ class JavaScriptMinifierTokenTest extends TestCase {
 					// Nothing to do, traverse the child nodes directly.
 					break;
 				case 'ArrayExpression':
+				case 'ArrayPattern':
 					$expected[] = [ 'type' => 'TYPE_PAREN_OPEN', 'token' => '[' ];
 					foreach ( $node->getElements() as $i => $child ) {
 						if ( $i !== 0 ) {
@@ -194,8 +197,10 @@ class JavaScriptMinifierTokenTest extends TestCase {
 					if ( $type === 'NewExpression' ) {
 						$expected[] = [ 'type' => 'TYPE_UN_OP', 'token' => 'new' ];
 					}
-					// TODO: Handle $node->getOptional() to output foo?.() instead of foo()
 					$traverse( $node->getCallee(), $node );
+					if ( $type === 'CallExpression' && $node->getOptional() ) {
+						$expected[] = [ 'type' => 'TYPE_DOT', 'token' => '?.' ];
+					}
 					$expected[] = [ 'type' => 'TYPE_PAREN_OPEN', 'token' => '(' ];
 					foreach ( $node->getArguments() as $i => $child ) {
 						if ( $i !== 0 ) {
@@ -213,6 +218,9 @@ class JavaScriptMinifierTokenTest extends TestCase {
 						$expected[] = [ 'type' => 'TYPE_PAREN_CLOSE', 'token' => ')' ];
 					}
 					$traverse( $node->getBody(), $node );
+					return Traverser::DONT_TRAVERSE_CHILD_NODES;
+				case 'ChainExpression':
+					$traverse( $node->getExpression(), $node );
 					return Traverser::DONT_TRAVERSE_CHILD_NODES;
 				case 'ConditionalExpression':
 					$traverse( $node->getTest(), $node );
@@ -314,13 +322,34 @@ class JavaScriptMinifierTokenTest extends TestCase {
 					return Traverser::DONT_TRAVERSE_CHILD_NODES;
 				case 'Literal':
 				case 'RegExpLiteral':
-					$expected[] = [ 'type' => 'TYPE_LITERAL', 'token' => (string)$node->getRaw() ];
+					if ( $type === 'Literal' && $node instanceof BigIntLiteral ) {
+						$location = $node->getLocation();
+						$start = $location->getStart()->getIndex();
+						$end = $location->getEnd()->getIndex();
+						$raw = substr( $code, $start, $end - $start );
+					} else {
+						$raw = (string)$node->getRaw();
+					}
+					$expected[] = [ 'type' => 'TYPE_LITERAL', 'token' => $raw ];
 					return Traverser::DONT_TRAVERSE_CHILD_NODES;
 				case 'MemberExpression':
 					$traverse( $node->getObject(), $node );
-					// TODO: Handle $node->getOptional() for `?.`
-					$expected[] = [ 'type' => 'TYPE_DOT', 'token' => '.' ];
-					$traverse( $node->getProperty(), $node );
+					$property = $node->getProperty();
+					$optional = $node->getOptional();
+					if (
+						$node->getComputed() ||
+						( $property->getType() !== 'Identifier' && $property->getType() !== 'PrivateIdentifier' )
+					) {
+						if ( $optional ) {
+							$expected[] = [ 'type' => 'TYPE_DOT', 'token' => '?.' ];
+						}
+						$expected[] = [ 'type' => 'TYPE_PAREN_OPEN', 'token' => '[' ];
+						$traverse( $property, $node );
+						$expected[] = [ 'type' => 'TYPE_PAREN_CLOSE', 'token' => ']' ];
+					} else {
+						$expected[] = [ 'type' => 'TYPE_DOT', 'token' => $optional ? '?.' : '.' ];
+						$traverse( $property, $node );
+					}
 					return Traverser::DONT_TRAVERSE_CHILD_NODES;
 				case 'MethodDefinition':
 					if ( $node->getStatic() ) {
@@ -348,6 +377,7 @@ class JavaScriptMinifierTokenTest extends TestCase {
 					$traverse( $value, $node );
 					return Traverser::DONT_TRAVERSE_CHILD_NODES;
 				case 'ObjectExpression':
+				case 'ObjectPattern':
 					$expected[] = [ 'type' => 'TYPE_BRACE_OPEN', 'token' => '{' ];
 					foreach ( $node->getProperties() as $i => $child ) {
 						if ( $i !== 0 ) {
@@ -400,6 +430,7 @@ class JavaScriptMinifierTokenTest extends TestCase {
 					$expected[] = [ 'type' => 'TYPE_PAREN_CLOSE', 'token' => ')' ];
 					return Traverser::DONT_TRAVERSE_CHILD_NODES;
 				case 'SpreadElement':
+				case 'RestElement':
 					$expected[] = [ 'type' => 'TYPE_UN_OP', 'token' => '...' ];
 					$traverse( $node->getArgument(), $node );
 					return Traverser::DONT_TRAVERSE_CHILD_NODES;
@@ -460,6 +491,10 @@ class JavaScriptMinifierTokenTest extends TestCase {
 					}
 					$literal .= '`';
 					$expected[] = [ 'type' => 'TYPE_LITERAL', 'token' => $literal ];
+					return Traverser::DONT_TRAVERSE_CHILD_NODES;
+				case 'TaggedTemplateExpression':
+					$traverse( $node->getTag(), $node );
+					$traverse( $node->getQuasi(), $node );
 					return Traverser::DONT_TRAVERSE_CHILD_NODES;
 				case 'ThrowStatement':
 					$expected[] = [ 'type' => 'TYPE_RETURN', 'token' => 'throw' ];

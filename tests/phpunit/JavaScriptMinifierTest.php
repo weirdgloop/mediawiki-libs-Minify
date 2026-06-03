@@ -1,4 +1,5 @@
 <?php
+declare( strict_types = 1 );
 
 use PHPUnit\Framework\TestCase;
 use Wikimedia\Minify\JavaScriptMinifier;
@@ -77,6 +78,8 @@ class JavaScriptMinifierTest extends TestCase {
 			[ "5.\nx;", "5.\nx;" ],
 			[ "0xFF.\nx;", "0xFF.x;" ],
 			[ "5.3.\nx;", "5.3.x;" ],
+			[ "(function(){return/* one */x;})", "(function(){return x;})" ],
+			[ "(function(){return/* one\ntwo */x;})", "(function(){return\nx;})" ],
 
 			// Cover failure case for incomplete hex literal
 			[ "0x;", "0x;", 'Expected a hexadecimal number but found 0x;' ],
@@ -199,17 +202,25 @@ class JavaScriptMinifierTest extends TestCase {
 			[ "var a = 5.;", "var a=5.;" ],
 			// No ambiguity after explicit fraction
 			[ "5.0.toString();", "5.0.toString();" ],
+			[ ".5.toString();", ".5.toString();" ],
+			[ ".42. toString();", ".42.toString();" ],
 			// No ambiguity after implicit fraction
 			[ "5..toString();", "5..toString();" ],
 			[ "5.\n.toString();", '5..toString();' ],
 			// No ambiguity after space (T303827)
 			[ "3\n.foo;", "3 .foo;" ],
 			[ "var _ = 2 .toString;", "var _=2 .toString;" ],
+			// No ambiguity after exponent
+			[ "10e5\n. toString();", "10e5.toString();" ],
+			// No ambiguity after implicit fraction and exponent
+			[ "10.e5\n. toString();", "10.e5.toString();" ],
 			// Invalid syntax: Simple dot notation on number literals is ambigious
 			[ "3.foo;", "3.foo;" ],
 			// Invalid syntax: Too many decimal points
 			[ "5..0;", "5..0;", 'Too many decimal points' ],
 			[ "5...toString();", "5...toString();", 'Too many decimal points' ],
+			// Invalid syntax: BigInt with exponent
+			[ "10e5n;", "10e5 n;" ],
 
 			// Cover states for dotless number literals with prop after space (T303827)
 			'STATEMENT dotless prop' => [ '42 .foo;', '42 .foo;' ],
@@ -255,6 +266,19 @@ class JavaScriptMinifierTest extends TestCase {
 			[ 'let a = `foo$\\\\` + 23;', 'let a=`foo$\\\\`+23;' ],
 			// Template string with an escaped \`
 			[ 'let a = `foo\\`bar + baz`;', 'let a=`foo\\`bar + baz`;' ],
+
+			// Tagged template literals
+			[ 'let value = tag`Hello`;', 'let value=tag`Hello`;' ],
+			[ 'let value = namespace.tag`Hello`;', 'let value=namespace.tag`Hello`;' ],
+			[ 'let value = console.log.bind( 1, 2 )`Hello`;', 'let value=console.log.bind(1,2)`Hello`;' ],
+			[ 'let value = new Function( "return arguments" )`Hello`;', 'let value=new Function("return arguments")`Hello`;' ],
+			[ 'let value = recursive`Hello``World`;', 'let value=recursive`Hello``World`;' ],
+			[ 'let value = tag`That ${ person } is ${ age }.`;', 'let value=tag`That ${person} is ${age}.`;' ],
+			[ 'let value = String.raw`Hi\\n${ 2 + 3 }!`;', 'let value=String.raw`Hi\\n${2+3}!`;' ],
+			[ 'let value = tag`Hello` / divisor;', 'let value=tag`Hello`/divisor;' ],
+			[ "tag\n`Hello`;", "tag\n`Hello`;" ],
+			// ES2018: Allow illegal escape sequences in tagged template strings.
+			[ 'let value = tag`\unicode and \u{55}`;', 'let value=tag`\unicode and \u{55}`;' ],
 
 			// Behavior of 'yield' in generator functions vs normal functions
 			[ "function *f( x ) {\n if ( x )\n yield\n ( 42 )\n}", "function*f(x){if(x)yield\n(42)}" ],
@@ -477,7 +501,7 @@ JAVASCRIPT
 				"let a = /\\p{Script=Greek}/u;",
 				"let a=/\\p{Script=Greek}/u;"
 			],
-			// ES2018 spread operator for arrays
+			// ES2015 spread operator for arrays
 			[
 				"let arr1 = [ 1, 2, 3 ]; let arr2 = [ 4, 5, 6 ]; let arr3 = [ ...arr1, ...arr2 ]; console.log( arr3 );",
 				"let arr1=[1,2,3];let arr2=[4,5,6];let arr3=[...arr1,...arr2];console.log(arr3);"
@@ -487,10 +511,93 @@ JAVASCRIPT
 				"let obj1 = { 1: 1, 2: 2, 3: 3 }; let obj2 = { 4: 4, 5: 5, 6: 6 }; let obj3 = { ...obj1, ...obj2 }; console.log( obj3 );",
 				"let obj1={1:1,2:2,3:3};let obj2={4:4,5:5,6:6};let obj3={...obj1,...obj2};console.log(obj3);"
 			],
+			// ES2015 spread operator in function/method call
+			[
+				"myFunc( ...args );    new C().myFunc( ...args );",
+				"myFunc(...args);new C().myFunc(...args);",
+			],
+			// ES2015 rest operator in array destructuring
+			[
+				"let [a, ...b] = [1, 2,3,  4]",
+				"let[a,...b]=[1,2,3,4]"
+			],
+			// ES2018 rest operator in object destructuring
+			[
+				"let {x, ...others} = {x: 1, y: 2, z: 3}",
+				"let{x,...others}={x:1,y:2,z:3}"
+			],
+			// ES2015 rest operator in function/method declaration
+			[
+				"function myFunc( ...args ) {}  \n class C { myFunc( ...args ) {} }",
+				"function myFunc(...args){}class C{myFunc(...args){}}",
+			],
 			// ES2018 asynchronous iteration ("for await")
 			[
 				"for await (const item of iterable) { console.log( item ); }",
 				"for await(const item of iterable){console.log(item);}"
+			],
+			// ES2019 optional catch binding
+			[
+				"try { risky(); } catch { recover(); }",
+				"try{risky();}catch{recover();}"
+			],
+			[
+				"try { risky(); } catch { recover(); } finally { cleanup(); }",
+				"try{risky();}catch{recover();}finally{cleanup();}"
+			],
+			// ES2020 optional chaining
+			[
+				"let value = obj?.property;",
+				"let value=obj?.property;"
+			],
+			[
+				"let value = obj?.[ key ];",
+				"let value=obj?.[key];"
+			],
+			[
+				"let value = callback?.( arg );",
+				"let value=callback?.(arg);"
+			],
+			[
+				"let value = obj?.property?.( arg )?.[ key ];",
+				"let value=obj?.property?.(arg)?.[key];"
+			],
+			[
+				"let value = obj?.property / divisor;",
+				"let value=obj?.property/divisor;"
+			],
+			[
+				"let value = condition ? .3 : fallback;",
+				"let value=condition?.3:fallback;"
+			],
+			[
+				"let value = 1?.toString();",
+				"let value=1?.toString();"
+			],
+			// ES2020 BigInt literals
+			[
+				"let value = 123n;",
+				"let value=123n;"
+			],
+			[
+				"let value = 0n;",
+				"let value=0n;"
+			],
+			[
+				"let value = 0xFFn + 0b101n + 0o77n;",
+				"let value=0xFFn+0b101n+0o77n;"
+			],
+			[
+				"let value = 1n.toString();",
+				"let value=1n.toString();"
+			],
+			[
+				"let value = 2n . toString();",
+				"let value=2n.toString();"
+			],
+			[
+				"let value = 123n / divisor;",
+				"let value=123n/divisor;"
 			],
 		];
 	}

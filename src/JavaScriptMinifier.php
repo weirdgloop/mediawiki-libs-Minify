@@ -339,15 +339,30 @@ class JavaScriptMinifier {
 			],
 		],
 		'&' => [
-			'&' => 2,
+			'&' => [
+				'' => 2,
+				'=' => [
+					'' => 3,
+				],
+			],
 			'=' => 2,
 		],
 		'|' => [
-			'|' => 2,
+			'|' => [
+				'' => 2,
+				'=' => [
+					'' => 3,
+				],
+			],
 			'=' => 2,
 		],
 		'?' => [
-			'?' => 2,
+			'?' => [
+				'' => 2,
+				'=' => [
+					'' => 3,
+				],
+			],
 			'.' => 2,
 		],
 		'/' => [
@@ -510,6 +525,9 @@ class JavaScriptMinifier {
 		'^='         => self::TYPE_BIN_OP,
 		'|='         => self::TYPE_BIN_OP,
 		'**='        => self::TYPE_BIN_OP,
+		'&&='        => self::TYPE_BIN_OP,
+		'||='        => self::TYPE_BIN_OP,
+		'??='        => self::TYPE_BIN_OP,
 
 		// ECMAScript 11.0 § 12.16 Comma Operator
 		','          => self::TYPE_COMMA,
@@ -748,14 +766,17 @@ class JavaScriptMinifier {
 				],
 			],
 		],
-		// After function*. Waits for { , then goes to a generator function statement.
+		// State after `function*` to wait for `{` and go to generator function statement.
+		//
+		// For example: `function* myGen(a, b) { yield 1; }`
 		self::GENFUNC => [
 			self::TYPE_BRACE_OPEN => [
 				// Note negative value: generator function states are negative
 				self::ACTION_GOTO => -self::STATEMENT
 			],
 		],
-		// Property assignment - This is an object literal declaration.
+		// State after `{` expecting property keys in an object literal declaration.
+		//
 		// For example: `{ key: value, key2, [computedKey3]: value3, method4() { ... } }`
 		self::PROPERTY_ASSIGNMENT => [
 			// Note that keywords like "if", "class", "var", "delete", "async", etc, are
@@ -826,11 +847,14 @@ class JavaScriptMinifier {
 				self::ACTION_GOTO => self::EXPRESSION_NO_NL,
 			],
 		],
-		// An expression immediately after return/throw/break/continue/yield, where a newline
-		// is not allowed. This state is identical to EXPRESSION, except that semicolon
-		// insertion can happen here, and we (almost) never stay here: in cases where EXPRESSION
-		// would do nothing, we go to EXPRESSION. We only stay here if there's a double yield,
-		// because 'yield yield foo' is a valid expression.
+
+		// State after `return` (or throw/break/continue/yield) where a newline is not allowed.
+		//
+		// This state is identical to EXPRESSION, except that semicolon insertion can happen here,
+		// and we (almost) never stay here:
+		// in cases where EXPRESSION would do nothing, we go back to EXPRESSION.
+		//
+		// We only stay here if there's a double yield, because `yield yield foo` is valid.
 		self::EXPRESSION_NO_NL => [
 			self::TYPE_UN_OP => [
 				self::ACTION_GOTO => self::EXPRESSION,
@@ -883,7 +907,19 @@ class JavaScriptMinifier {
 				self::ACTION_GOTO => self::EXPRESSION_NO_NL,
 			],
 		],
-		// Place in an expression after an operand, where we expect an operator
+
+		// State after an literal or operand in an expression, such as:
+		// `var x = foo`      potentially `var x = foo + 1` or `var x = foo()`
+		// `var x = async`    potentially `var x = async + 1` or `var x = async function () {}`
+		//
+		// This is also the state we pop back to after a nested operation has
+		// completed such as after:
+		// `var x = (foo + 1)`
+		// `var x = { foo: 1 }`
+		// `var x = class Foo {}`
+		// `var x = function () {}`
+		//
+		// We are in an expression after an operand, and expect an operator
 		self::EXPRESSION_OP => [
 			self::TYPE_BIN_OP => [
 				self::ACTION_GOTO => self::EXPRESSION,
@@ -922,14 +958,22 @@ class JavaScriptMinifier {
 				self::ACTION_GOTO => self::FUNC,
 			],
 		],
-		// State after a dot (.). Like EXPRESSION, except that many keywords behave like literals
-		// (e.g. class, if, else, var, function) because they're not valid as identifiers but are
-		// valid as property names.
+
+		// State after a dot in EXPRESSION_OP, such as:
+		// `var x = foo.`
+		// `var x = (foo + 1).`
+		//
+		// Like EXPRESSION, except many keywords behave like literals
+		// (e.g. class, if, else, var, function) because they're not valid as identifiers
+		// but are valid as property names.
 		self::EXPRESSION_DOT => [
 			self::TYPE_LITERAL => [
 				self::ACTION_GOTO => self::EXPRESSION_OP,
 			],
 			// The following are keywords behaving as literals
+			self::TYPE_ASYNC => [
+				self::ACTION_GOTO => self::EXPRESSION_OP,
+			],
 			self::TYPE_RETURN => [
 				self::ACTION_GOTO => self::EXPRESSION_OP,
 			],
@@ -962,9 +1006,11 @@ class JavaScriptMinifier {
 				self::ACTION_GOTO => self::PAREN_EXPRESSION,
 			],
 		],
-		// State after the } closing an arrow function body: like STATEMENT except
-		// that it has semicolon insertion, COMMA can continue the expression, and after
-		// a function we go to STATEMENT instead of EXPRESSION_OP
+
+		// State after the `}` that closes an arrow function body
+		//
+		// Like STATEMENT except it allows semicolon insertion, COMMA can continue the expression,
+		// and after a function we go to STATEMENT instead of EXPRESSION_OP.
 		self::EXPRESSION_END => [
 			self::TYPE_UN_OP => [
 				self::ACTION_GOTO => self::EXPRESSION,
@@ -1016,7 +1062,12 @@ class JavaScriptMinifier {
 				self::ACTION_GOTO => self::EXPRESSION_OP,
 			],
 		],
-		// State after =>. Like EXPRESSION, except that { begins an arrow function body
+
+		// State after `=>` such as:
+		// `var inc = a =>`        potentially `var inc = a => a + 1;`
+		// `var sum = (a, b) =>`   potentially `var sum = (a, b) => a + b;`
+		//
+		// Like EXPRESSION, except that `{` begins an arrow function body
 		// rather than an object literal.
 		self::EXPRESSION_ARROWFUNC => [
 			self::TYPE_UN_OP => [
@@ -1048,9 +1099,14 @@ class JavaScriptMinifier {
 				self::ACTION_GOTO => self::EXPRESSION_OP,
 			],
 		],
-		// Expression after a ? . This differs from EXPRESSION because a : ends the ternary
-		// rather than starting STATEMENT (outside a ternary, : comes after a goto label)
-		// The actual rule for : ending the ternary is in EXPRESSION_TERNARY_OP.
+
+		// State after `?` in EXPRESSION_OP, expecting another expression, such as:
+		// `var x = foo ?`
+		// `foo ?`
+		//
+		// This differs from EXPRESSION because a `:` ends the ternary
+		// rather than starting STATEMENT (outside a ternary, `:` comes after a goto label)
+		// The actual rule for `:` ending the ternary is in EXPRESSION_TERNARY_OP.
 		self::EXPRESSION_TERNARY => [
 			self::TYPE_BRACE_OPEN => [
 				self::ACTION_PUSH => self::EXPRESSION_TERNARY_OP,
@@ -1117,6 +1173,16 @@ class JavaScriptMinifier {
 				self::ACTION_GOTO => self::EXPRESSION_TERNARY,
 			],
 		],
+
+		// State after an literal or operand in a ternary expression, such as:
+		// `var x = foo ? foo`       potentially `foo ? foo + 1 : 0` or `foo ? foo.bar : 0`
+		//
+		// This is also the state we pop back to after a nested operation has
+		// completed such as after:
+		// `var x = foo ? (foo + 1)`
+		// `var x = foo ? { foo: 1 }`
+		// `var x = foo ? function (a, b) {}`
+		//
 		// Like EXPRESSION_OP, but for ternaries, see EXPRESSION_TERNARY
 		self::EXPRESSION_TERNARY_OP => [
 			self::TYPE_BIN_OP => [
@@ -1146,12 +1212,20 @@ class JavaScriptMinifier {
 				self::ACTION_POP => true,
 			],
 		],
+
+		// State after a dot in a ternary expression, such as:
+		// `var x = foo ? foo.`
+		// `var x = foo ? (foo + 1).`
+		//
 		// Like EXPRESSION_DOT, but for ternaries, see EXPRESSION_TERNARY
 		self::EXPRESSION_TERNARY_DOT => [
 			self::TYPE_LITERAL => [
 				self::ACTION_GOTO => self::EXPRESSION_TERNARY_OP,
 			],
 			// The following are keywords behaving as literals
+			self::TYPE_ASYNC => [
+				self::ACTION_GOTO => self::EXPRESSION_TERNARY_OP,
+			],
 			self::TYPE_RETURN => [
 				self::ACTION_GOTO => self::EXPRESSION_TERNARY_OP,
 			],
@@ -1215,7 +1289,7 @@ class JavaScriptMinifier {
 				self::ACTION_GOTO => self::EXPRESSION_TERNARY_OP,
 			],
 		],
-		// Expression inside parentheses. Like EXPRESSION, except that ) ends this state
+		// Expression inside parentheses. Like EXPRESSION, except that `)` ends this state
 		// This differs from EXPRESSION because semicolon insertion can't happen here
 		self::PAREN_EXPRESSION => [
 			self::TYPE_BRACE_OPEN => [
@@ -1332,12 +1406,20 @@ class JavaScriptMinifier {
 				self::ACTION_POP => true,
 			],
 		],
+
+		// State after dot in PAREN_EXPRESSION, such as
+		// `var x = (foo.`
+		// `if (foo.`
+		//
 		// Like EXPRESSION_DOT, but in parentheses, see PAREN_EXPRESSION
 		self::PAREN_EXPRESSION_DOT => [
 			self::TYPE_LITERAL => [
 				self::ACTION_GOTO => self::PAREN_EXPRESSION_OP,
 			],
 			// The following are keywords behaving as literals
+			self::TYPE_ASYNC => [
+				self::ACTION_GOTO => self::PAREN_EXPRESSION_OP,
+			],
 			self::TYPE_RETURN => [
 				self::ACTION_GOTO => self::PAREN_EXPRESSION_OP,
 			],
@@ -1437,8 +1519,9 @@ class JavaScriptMinifier {
 				self::ACTION_POP => true,
 			],
 		],
-		// Expression as the value of a key in an object literal.
-		// This means we're at "{ foo:".
+
+		// State after `{ foo:` expecting an expression as the value of a key in an object literal.
+		//
 		// Like EXPRESSION, except that a comma (in PROPERTY_EXPRESSION_OP) goes to PROPERTY_ASSIGNMENT instead
 		self::PROPERTY_EXPRESSION => [
 			self::TYPE_BRACE_OPEN => [
@@ -1515,8 +1598,10 @@ class JavaScriptMinifier {
 				self::ACTION_GOTO => self::PROPERTY_EXPRESSION,
 			],
 		],
+
+		// State after `{ foo: bar`
+		//
 		// Like EXPRESSION_OP, but in a property expression, see PROPERTY_EXPRESSION
-		// This means we're at "{ foo: bar".
 		self::PROPERTY_EXPRESSION_OP => [
 			self::TYPE_BIN_OP => [
 				self::ACTION_GOTO => self::PROPERTY_EXPRESSION,
@@ -1548,8 +1633,10 @@ class JavaScriptMinifier {
 				self::ACTION_GOTO => self::PAREN_EXPRESSION,
 			],
 		],
+
+		// State after `{ foo: async`
+		//
 		// Like PROPERTY_EXPRESSION_OP, but with an added TYPE_FUNC handler.
-		// This means we're at "{ foo: async".
 		//
 		// This state exists to support "{ foo: async function() {",
 		// which can't re-use PROPERTY_EXPRESSION_OP, because handling TYPE_FUNC there
@@ -1602,12 +1689,18 @@ class JavaScriptMinifier {
 				self::ACTION_GOTO => self::FUNC,
 			],
 		],
+
+		// State after `{ foo: bar.`
+		//
 		// Like EXPRESSION_DOT, but in a property expression, see PROPERTY_EXPRESSION
 		self::PROPERTY_EXPRESSION_DOT => [
 			self::TYPE_LITERAL => [
 				self::ACTION_GOTO => self::PROPERTY_EXPRESSION_OP,
 			],
 			// The following are keywords behaving as literals
+			self::TYPE_ASYNC => [
+				self::ACTION_GOTO => self::PROPERTY_EXPRESSION_OP,
+			],
 			self::TYPE_RETURN => [
 				self::ACTION_GOTO => self::PROPERTY_EXPRESSION_OP,
 			],
@@ -2030,23 +2123,55 @@ class JavaScriptMinifier {
 		// Pretend that we have seen a semicolon yet
 		$last = ';';
 		while ( $pos < $length ) {
-			// Keep the scanner logic in sync with getNextNonWhitespaceChar().
-			// It's inlined here as it's a hot path for all minification.
-
-			// First, skip over any whitespace and multiline comments, recording whether we
-			// found any newline character
+			// First, skip over any whitespace and line breaks
+			//
+			// ECMAScript 10.0 § 11.2 White Space
+			// https://262.ecma-international.org/10.0/#sec-white-space
+			//
+			// - U+0009 Tab (\t)
+			// - U+000B Line Tabulation (VT, \v in JavaScript, \xb binary in PHP)
+			// - U+000C Form Feed (FF, \f in JavaScript, \xc binary in PHP)
+			// - U+0020 Space
+			// - [Not implemented] U+00A0 No Break Space (NBSP)
+			// - [Not implemented] U+FEFF Zero Width No-Break Space (ZWNBSP)
+			// - [Not implemented] Any other Unicode "Space_Separator (Zs)" code point
+			//
+			// ECMAScript 10.0 § 11.3 Line Terminators
+			// - U+000A Line Feed (LF, \n)
+			// - U+000D Carriage Return (CR, \r)
+			// - [Not implemented] U+2028 Line Separator (LS)
+			// - [Not implemented] U+2029 Paragraph Separator (PS)
+			//
+			// The U+2028 and U+2029 codepoints are multibyte characters that are extremely unlikely
+			// to appear in source code because there is no reason for either hand-written or
+			// machine-generated code to use them. They were added in ES2019 to retroactively
+			// define JSON as a subset of JavaScript, and JSON had these only for hysterical raisins.
+			// We don't implement them because doing so would slow down all parsing, especially for
+			// "end of inline comment" and "end of identifier or reserved word". It is acceptable
+			// that we simply don't support such input. In simple cases such input would actually
+			// work fine, but it can cause invalid output.
+			//
+			// NOTE: We do support multibyte line terminators in multi-line string literals and
+			// template string literals.
+			//
+			// Optimization: Rearrange with Space, Tab, and Line Feed first which are most common.
+			//
+			// Optimization: We inline getNextNonWhitespaceChar() here because it is a hot path.
+			//
+			// NOTE: Keep the scanner logic in sync with getNextNonWhitespaceChar().
 			$skip = strspn( $s, " \t\n\r\xb\xc", $pos );
 			if ( !$skip ) {
 				$ch = $s[$pos];
+
+				// Skip multiline comment. Search for the end token or EOT.
 				if ( $ch === '/' && substr( $s, $pos, 2 ) === '/*' ) {
-					// Multiline comment. Search for the end token or EOT.
 					$end = strpos( $s, '*/', $pos + 2 );
 					$skip = $end === false ? $length - $pos : $end - $pos + 2;
 				}
 			}
-			// Record whether we skipped over a newline (in either whitespace or multiline comment)
-			// The semicolon insertion mechanism needs to know whether there was a newline
-			// between two tokens, so record it now.
+
+			// Record whether we skipped over a newline in whitespace or multiline comment.
+			// The semicolon insertion mechanism must know whether there was a newline between tokens.
 			if ( $skip ) {
 				if ( !$newlineFound && strcspn( $s, "\r\n", $pos, $skip ) !== $skip ) {
 					$newlineFound = true;
@@ -2210,7 +2335,7 @@ class JavaScriptMinifier {
 					'b', 'B' => '01',
 					'o', 'O' => '01234567',
 				};
-				$len = strspn( $s, $digits, $end );
+				$len = strspn( $s, $digits . '_', $end );
 				if ( !$len && !$error ) {
 					$base = match ( $prefix ) {
 						'x', 'X' => 'hexadecimal',
@@ -2236,20 +2361,27 @@ class JavaScriptMinifier {
 				is_numeric( $ch )
 				|| ( $ch === '.' && $pos + 1 < $length && is_numeric( $s[$pos + 1] ) )
 			) {
-				$end += strspn( $s, '0123456789', $end );
+				$end += strspn( $s, '0123456789_', $end );
 				if ( $ch === '.' ) {
 					// Valid: ".42" (number literal, fraction with implied zero)
+					// Valid: ".42_000"
 					$decimal = 1;
 				} else {
 					$decimal = strspn( $s, '.', $end );
 					if ( $decimal ) {
 						// Valid: "5." (number literal, optional fraction)
+						// Valid: "5_0." (number literal, optional fraction)
 						// Valid: "5.42" (number literal)
-						// Valid: "5..toString" (number literal "5.", followed by member expression).
+						// Valid: "5..toString" (number literal "5.", followed by member expression)
+						// Valid: "5..a_100"    (number literal "5.", followed by member expression)
+						// Valid: "5. .a_100"   (number literal "5.", followed by member expression)
+						// Valid: "5_0.4_2.toString" (number "50.42", followed by member expression)
 						// Invalid: "5..42"
 						// Invalid: "5...42"
 						// Invalid: "5...toString"
-						$fraction = strspn( $s, '0123456789', $end + $decimal );
+						// Invalid: "5._.toString" (numeric separator must be between digits, undetected)
+						// Invalid: "5_.toString" (numeric separator not allowed at end of number, undetected)
+						$fraction = strspn( $s, '0123456789_', $end + $decimal );
 						if ( $decimal === 2 && !$fraction ) {
 							// Rewind one character, so that the member expression dot
 							// will be parsed as the next token (TYPE_DOT).
@@ -2260,6 +2392,9 @@ class JavaScriptMinifier {
 						}
 						$end += $decimal + $fraction;
 					} else {
+						// Valid: "42"
+						// Valid: "42_000"
+						// Invalid: "5_" (numeric separator not allowed at end of number, undetected)
 						$plainDigits = true;
 					}
 				}
@@ -2272,7 +2407,7 @@ class JavaScriptMinifier {
 
 					// + sign is optional; - sign is required.
 					$end += strspn( $s, '-+', $end );
-					$len = strspn( $s, '0123456789', $end );
+					$len = strspn( $s, '0123456789_', $end );
 					if ( !$len && !$error ) {
 						$error = new ParseError(
 							'Missing decimal digits after exponent',

@@ -80,6 +80,9 @@ class JavaScriptMinifierTest extends TestCase {
 			[ "5.3.\nx;", "5.3.x;" ],
 			[ "(function(){return/* one */x;})", "(function(){return x;})" ],
 			[ "(function(){return/* one\ntwo */x;})", "(function(){return\nx;})" ],
+			// Not implemented: ES2019 U+2028 (line separator) or U+2029 (paragraph separator) as Line Terminator
+			[ "(function(){return/* one\u{2028}two */x;})", "(function(){return x;})" ],
+			[ "(function(){return/* one\u{2029}two */x;})", "(function(){return x;})" ],
 
 			// Cover failure case for incomplete hex literal
 			[ "0x;", "0x;", 'Expected a hexadecimal number but found 0x;' ],
@@ -200,6 +203,7 @@ class JavaScriptMinifierTest extends TestCase {
 			// Numbers
 			// Fraction is optional
 			[ "var a = 5.;", "var a=5.;" ],
+			[ "var a = 5_0.;", "var a=5_0.;" ],
 			// No ambiguity after explicit fraction
 			[ "5.0.toString();", "5.0.toString();" ],
 			[ ".5.toString();", ".5.toString();" ],
@@ -207,6 +211,8 @@ class JavaScriptMinifierTest extends TestCase {
 			// No ambiguity after implicit fraction
 			[ "5..toString();", "5..toString();" ],
 			[ "5.\n.toString();", '5..toString();' ],
+			[ "5. \n . a_100();", '5..a_100();' ],
+			[ "5_0.4_2 \n . \n toString();", '5_0.4_2.toString();' ],
 			// No ambiguity after space (T303827)
 			[ "3\n.foo;", "3 .foo;" ],
 			[ "var _ = 2 .toString;", "var _=2 .toString;" ],
@@ -279,6 +285,16 @@ class JavaScriptMinifierTest extends TestCase {
 			[ "tag\n`Hello`;", "tag\n`Hello`;" ],
 			// ES2018: Allow illegal escape sequences in tagged template strings.
 			[ 'let value = tag`\unicode and \u{55}`;', 'let value=tag`\unicode and \u{55}`;' ],
+			// Line breaks in template literals
+			[
+				"let value = `Hi\nFoo\r\n` / divisor;",
+				"let value=`Hi\nFoo\r\n`/divisor;"
+			],
+			// ES2019: U+2028 (line separator) or U+2029 (paragraph separator) in template literals
+			[
+				"let value = `Hi\nFoo\u{2028}Bar\u{2028}\r\n` / divisor;",
+				"let value=`Hi\nFoo\u{2028}Bar\u{2028}\r\n`/divisor;"
+			],
 
 			// Behavior of 'yield' in generator functions vs normal functions
 			[ "function *f( x ) {\n if ( x )\n yield\n ( 42 )\n}", "function*f(x){if(x)yield\n(42)}" ],
@@ -372,12 +388,14 @@ JAVASCRIPT
 			// import
 			[ "import { Foo, Bar as Baz, Quux } from 'thingy';", "import{Foo,Bar as Baz,Quux}from'thingy';" ],
 			[ "import * as Foo from 'thingy';", "import*as Foo from'thingy';" ],
+			[ "import \n/* x */\n// yy\n * as Foo from 'thingy';", "import*as Foo from'thingy';" ],
 			[ "import Foo, * as Bar from 'thingy';", "import Foo,*as Bar from'thingy';" ],
 			// ES2020 import/export
 			[ "import( 'thingy' );", "import('thingy');" ],
-			[ "import( 'thingy' ) / divisor;", "import('thingy')/divisor;" ],
+			[ "import \n/* x */\n// yy\n ( 'thingy' ) / divisor;", "import('thingy')/divisor;" ],
 			[ "let module = import( 'thingy' );", "let module=import('thingy');" ],
 			[ "let url = import.meta.url;", "let url=import.meta.url;" ],
+			[ "let url = import \n/* x */\n// yy\n . \nmeta\n.\nurl;", "let url=import.meta.url;" ],
 			[ "export * as Foo from 'thingy';", "export*as Foo from'thingy';" ],
 			// Semicolon insertion before import/export
 			[ "( x, y ) => { return x + y; }\nexport class Foo {}", "(x,y)=>{return x+y;}\nexport class Foo{}" ],
@@ -433,6 +451,22 @@ JAVASCRIPT
 			[
 				"let x = {y: z.delete}\n let obj = {}\n function f() { return\n42 }",
 				"let x={y:z.delete}\nlet obj={}\nfunction f(){return\n42}"
+			],
+			// Reserved async word classified as literal in dot notation (T429402)
+			[
+				// EXPRESSION_DOT
+				"if (r.async) {} function isLinkOpen() {} function isLinkClose() { return />/; }\n// Stupid",
+				"if(r.async){}function isLinkOpen(){}function isLinkClose(){return/>/;}"
+			],
+			[
+				// PROPERTY_EXPRESSION_DOT
+				"var r = { foo: bar.async }; function isLinkOpen() {} function isLinkClose() { return />/; }\n// Stupid",
+				"var r={foo:bar.async};function isLinkOpen(){}function isLinkClose(){return/>/;}"
+			],
+			[
+				// EXPRESSION_TERNARY_DOT
+				"var x = foo ? bar.async : 0; function isLinkOpen() {} function isLinkClose() { return />/; }\n// Stupid",
+				"var x=foo?bar.async:0;function isLinkOpen(){}function isLinkClose(){return/>/;}"
 			],
 			[
 				"var\n x \n = \n async \n function foo(){}",
@@ -604,6 +638,28 @@ JAVASCRIPT
 			[
 				"let value = 123n / divisor;",
 				"let value=123n/divisor;"
+			],
+			// ES2021 numeric separators
+			[
+				"let value = 1_000_000;",
+				"let value=1_000_000;"
+			],
+			[
+				"let value = 1_000.25_5e1_0;",
+				"let value=1_000.25_5e1_0;"
+			],
+			[
+				"let value = 0b1010_0101 + 0o7_7 + 0xFF_EC;",
+				"let value=0b1010_0101+0o7_7+0xFF_EC;"
+			],
+			[
+				"let value = 0b1010_0101n + 1_000n;",
+				"let value=0b1010_0101n+1_000n;"
+			],
+			// ES2021 logical assignment operators
+			[
+				"a ||= b; c &&= d; e ??= f;",
+				"a||=b;c&&=d;e??=f;"
 			],
 		];
 	}
@@ -949,6 +1005,29 @@ JAVASCRIPT
 					'}catch{',
 					'console.log(\'An error occurred\');',
 					'}'
+				]
+			],
+			'multiline string literal' => [
+				"var \r\n\t x = \r\n\t \"foo \\\n bar\\\r\n\t\";console.log(x);",
+				2,
+				[
+					'',
+					'var',
+					'x=',
+					'"foo \\',
+					' bar\\' . "\r",
+					"\t" . '";console.log(x);'
+				]
+			],
+			'ES2019 U+2028 (line separator) or U+2029 (paragraph separator) in multiline string literal' => [
+				"var \r\n\t x = \r\n\t \"foo \\\r\n bar\\\u{2028}\u{2029}\t\";console.log(x);",
+				2,
+				[
+					'',
+					'var',
+					'x=',
+					'"foo \\' . "\r",
+					' bar\\' . "\u{2028}\u{2029}\t" . '";console.log(x);'
 				]
 			]
 		];

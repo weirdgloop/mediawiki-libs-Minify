@@ -68,6 +68,14 @@ class JavaScriptMinifierTest extends TestCase {
 			[ "throw new\nError('x');", "throw new Error('x');" ],
 			[ "while(p){continue\nx;}", "while(p){continue\nx;}" ],
 			[ "while(p){break\nx;}", "while(p){break\nx;}" ],
+			[
+				"console.log(Array.from((function(){yield \n+1;})()));",
+				"console.log(Array.from((function(){yield+1;})()));"
+			],
+			[
+				"console.log(Array.from((function*(){yield \n+1;})()));",
+				"console.log(Array.from((function*(){yield\n+1;})()));"
+			],
 			[ "var\nx;", "var x;" ],
 			[ "x\ny;", "x\ny;" ],
 			[ "x\n++y;", "x\n++y;" ],
@@ -358,6 +366,53 @@ JAVASCRIPT
 				"class Foo { get bar() { return\n42 } set baz( val ) { throw new Error( 'yikes' ) } }",
 				"class Foo{get bar(){return\n42}set baz(val){throw new Error('yikes')}}"
 			],
+			// ES2022 class fields and private elements
+			[
+				"class C { field = 1; static value; #secret = 2; static #shared; }",
+				"class C{field=1;static value;#secret=2;static #shared;}"
+			],
+			[
+				"class C { [ key ] = value; static [ name ] = other; #method() { return this.#secret; }" .
+					" get #value() { return this.#secret; } set #value( value ) { this.#secret = value; } }",
+				"class C{[key]=value;static[name]=other;#method(){return this.#secret;}" .
+					"get #value(){return this.#secret;}set #value(value){this.#secret=value;}}"
+			],
+			[
+				"class C { field = 1\n static value = 2\n #secret = 3\n static #shared = 4 }",
+				"class C{field=1\nstatic value=2\n#secret=3\nstatic #shared=4}"
+			],
+			[
+				"class C { async\n method() {} }",
+				"class C{async\nmethod(){}}"
+			],
+			'class field object initializer before constructor' => [
+				'class Badge extends HTMLElement{$badge;$badgeContent;$defaults={' .
+					"positionX:'left',positionY:'bottom'}\n" .
+					"constructor(){super();this.attachShadow({mode:'open'});}}",
+				'class Badge extends HTMLElement{$badge;$badgeContent;$defaults={' .
+					"positionX:'left',positionY:'bottom'}\n" .
+					"constructor(){super();this.attachShadow({mode:'open'});}}"
+			],
+			'class field initializers ending in punctuation' => [
+				"class C { object = {}\n array = []\n call = f()\n single = 'x'\n double = \"x\"\n" .
+					"template = `x`\n method() {} }",
+				"class C{object={}\narray=[]\ncall=f()\nsingle='x'\ndouble=\"x\"\n" .
+					"template=`x`\nmethod(){}}"
+			],
+			'class field initializer continuation' => [
+				"class C { field = f()\n .value; other = []\n .length; }",
+				"class C{field=f().value;other=[].length;}"
+			],
+			// ES2022 class static blocks
+			[
+				"class C { static { this.registry = new Map(); } method() { return this.registry; } }",
+				"class C{static{this.registry=new Map();}method(){return this.registry;}}"
+			],
+			// ES2022 private brand checks
+			[
+				"class C { #secret; has( obj ) { return #secret in obj; } }",
+				"class C{#secret;has(obj){return #secret in obj;}}"
+			],
 			// Extends
 			[ "class Foo extends Bar { f() { return\n42 } }", "class Foo extends Bar{f(){return\n42}}" ],
 			[ "class Foo extends Bar.Baz { f() { return\n42 } }", "class Foo extends Bar.Baz{f(){return\n42}}" ],
@@ -397,6 +452,12 @@ JAVASCRIPT
 			[ "let url = import.meta.url;", "let url=import.meta.url;" ],
 			[ "let url = import \n/* x */\n// yy\n . \nmeta\n.\nurl;", "let url=import.meta.url;" ],
 			[ "export * as Foo from 'thingy';", "export*as Foo from'thingy';" ],
+			// ES2022 arbitrary module namespace identifiers
+			[ "import { 'not an id' as alias } from 'thingy';", "import{'not an id'as alias}from'thingy';" ],
+			[ "export { alias as 'not an id' };", "export{alias as'not an id'};" ],
+			[ "export { 'not an id' as alias } from 'thingy';", "export{'not an id'as alias}from'thingy';" ],
+			// ES2022 top-level await
+			[ "await import( 'thingy' );", "await import('thingy');" ],
 			// Semicolon insertion before import/export
 			[ "( x, y ) => { return x + y; }\nexport class Foo {}", "(x,y)=>{return x+y;}\nexport class Foo{}" ],
 			[ "let x = y + 3\nimport Foo from 'thingy';", "let x=y+3\nimport Foo from'thingy';" ],
@@ -484,7 +545,7 @@ JAVASCRIPT
 			// Async class methods
 			[
 				"class User { getId() {\nreturn 42;}\n\n async  login() {\n  return true;\n }\n }",
-				"class User{getId(){return 42;}async login(){return true;}}"
+				"class User{getId(){return 42;}\nasync login(){return true;}}"
 			],
 			// Async object methods
 			[
@@ -660,6 +721,11 @@ JAVASCRIPT
 			[
 				"a ||= b; c &&= d; e ??= f;",
 				"a||=b;c&&=d;e??=f;"
+			],
+			// ES2022 RegExp match indices
+			[
+				"let match = /(?<year>\\d{4})/d.exec( value );",
+				"let match=/(?<year>\\d{4})/d.exec(value);"
 			],
 		];
 	}

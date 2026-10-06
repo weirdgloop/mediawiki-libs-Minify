@@ -39,7 +39,7 @@ use ReflectionClass;
  * So this class is meant to allow arbitrary (but syntactically correct) input, while being
  * fast enough to be used for on-the-fly minifying.
  *
- * This class was written with ECMA-262 16th Edition in mind ("ECMAScript 2025"). Parsing features
+ * This class was written with the ECMAScript 2025 Language Specification in mind. Parsing features
  * new to later editions of ECMAScript might not be supported. It's assumed that the input is
  * syntactically correct; if it's not, this class may not detect that, and may produce incorrect
  * output.
@@ -204,7 +204,7 @@ class JavaScriptMinifier {
 	 * Unlike the ECMAScript spec, we define these as individual symbols, not sequences.
 	 */
 	private static $opChars = [
-		// ECMAScript 16.0 § 12.8 Punctuators
+		// ECMAScript 2025 § 12.8 Punctuators
 		//
 		//    Punctuator
 		//    DivPunctuator
@@ -236,11 +236,11 @@ class JavaScriptMinifier {
 		'/' => true,
 		'}' => true,
 
-		// ECMAScript 16.0 § 12.9.4 String Literals
+		// ECMAScript 2025 § 12.9.4 String Literals
 		'"' => true,
 		"'" => true,
 
-		// ECMAScript 16.0 § 12.9.6 Template Literal Lexical Components
+		// ECMAScript 2025 § 12.9.6 Template Literal Lexical Components
 		'`' => true,
 	];
 
@@ -384,14 +384,14 @@ class JavaScriptMinifier {
 	private static $tokenTypes = [
 		// Can be one of:
 		//
-		// - ECMAScript 16.0 § 13.2.4 Array Initializer
+		// - ECMAScript 2025 § 13.2.4 Array Initializer
 		//    ... AssignmentExpression
-		// - ECMAScript 16.0 § 14.3.3 Destructuring Binding Patterns
+		// - ECMAScript 2025 § 14.3.3 Destructuring Binding Patterns
 		//    ... BindingIdentifier
 		//    ... BindingPattern
 		'...'        => self::TYPE_UN_OP,
 
-		// ECMAScript 16.0 § 13.3 Left-Hand-Side Expressions
+		// ECMAScript 2025 § 13.3 Left-Hand-Side Expressions
 		//
 		//    MemberExpression
 		//    OptionalExpression
@@ -401,7 +401,7 @@ class JavaScriptMinifier {
 		'.'          => self::TYPE_DOT,
 		'?.'         => self::TYPE_DOT,
 
-		// ECMAScript 16.0 § 13.4 Update Expressions
+		// ECMAScript 2025 § 13.4 Update Expressions
 		//
 		//    LeftHandSideExpression [no LineTerminator here] ++
 		//    LeftHandSideExpression [no LineTerminator here] --
@@ -415,7 +415,7 @@ class JavaScriptMinifier {
 		'++'         => self::TYPE_INCR_OP,
 		'--'         => self::TYPE_INCR_OP,
 
-		// ECMAScript 16.0 § 13.5 Unary Operators
+		// ECMAScript 2025 § 13.5 Unary Operators
 		//
 		//    UnaryExpression
 		//        includes UpdateExpression
@@ -435,12 +435,12 @@ class JavaScriptMinifier {
 		//     var z = +y;    // unary (convert to number)
 		//     var z = x + y; // binary (add operation)
 		//
-		// ECMAScript 16.0 § 13.5 Unary Operators
+		// ECMAScript 2025 § 13.5 Unary Operators
 		//
 		//     + UnaryExpression
 		//     - UnaryExpression
 		//
-		// ECMAScript 16.0 § 13.8 Additive Operators
+		// ECMAScript 2025 § 13.8 Additive Operators
 		//
 		//     AdditiveExpression + MultiplicativeExpression
 		//     AdditiveExpression - MultiplicativeExpression
@@ -454,15 +454,15 @@ class JavaScriptMinifier {
 		// whitespace or line breaks.
 		//
 		// Defined in:
-		// - ECMAScript 16.0 § 13.6 Exponentiation Operator
+		// - ECMAScript 2025 § 13.6 Exponentiation Operator
 		//   ExponentiationExpression
-		// - ECMAScript 16.0 § 13.7 Multiplicative Operators
+		// - ECMAScript 2025 § 13.7 Multiplicative Operators
 		//   MultiplicativeOperator
-		// - ECMAScript 16.0 § 13.9 Bitwise Shift Operators
+		// - ECMAScript 2025 § 13.9 Bitwise Shift Operators
 		//   ShiftExpression
-		// - ECMAScript 16.0 § 13.10 Relational Operators
+		// - ECMAScript 2025 § 13.10 Relational Operators
 		//   RelationalExpression
-		// - ECMAScript 16.0 § 13.11 Equality Operators
+		// - ECMAScript 2025 § 13.11 Equality Operators
 		//   EqualityExpression
 		'**'         => self::TYPE_BIN_OP,
 		'*'          => self::TYPE_BIN_OP,
@@ -482,7 +482,7 @@ class JavaScriptMinifier {
 		'==='        => self::TYPE_BIN_OP,
 		'!=='        => self::TYPE_BIN_OP,
 
-		// ECMAScript 16.0 § 13.12 Binary Bitwise Operators
+		// ECMAScript 2025 § 13.12 Binary Bitwise Operators
 		//
 		//    BitwiseANDExpression
 		//    BitwiseXORExpression
@@ -492,7 +492,7 @@ class JavaScriptMinifier {
 		'^'          => self::TYPE_BIN_OP,
 		'|'          => self::TYPE_BIN_OP,
 
-		// ECMAScript 16.0 § 13.13 Binary Logical Operators
+		// ECMAScript 2025 § 13.13 Binary Logical Operators
 		//
 		//    LogicalANDExpression
 		//    LogicalORExpression
@@ -506,7 +506,7 @@ class JavaScriptMinifier {
 		'||'         => self::TYPE_BIN_OP,
 		'??'         => self::TYPE_BIN_OP,
 
-		// ECMAScript 16.0 § 13.14 Conditional Operator
+		// ECMAScript 2025 § 13.14 Conditional Operator
 		//
 		//    ConditionalExpression:
 		//        ShortCircuitExpression ? AssignmentExpression : AssignmentExpression
@@ -515,7 +515,7 @@ class JavaScriptMinifier {
 		'?'          => self::TYPE_HOOK,
 		':'          => self::TYPE_COLON,
 
-		// ECMAScript 16.0 § 13.15 Assignment Operators
+		// ECMAScript 2025 § 13.15 Assignment Operators
 		'='          => self::TYPE_BIN_OP,
 		'*='         => self::TYPE_BIN_OP,
 		'/='         => self::TYPE_BIN_OP,
@@ -533,10 +533,10 @@ class JavaScriptMinifier {
 		'||='        => self::TYPE_BIN_OP,
 		'??='        => self::TYPE_BIN_OP,
 
-		// ECMAScript 16.0 § 13.16 Comma Operator
+		// ECMAScript 2025 § 13.16 Comma Operator
 		','          => self::TYPE_COMMA,
 
-		// ECMAScript 16.0 § 12.10.1 Rules of Automatic Semicolon Insertion
+		// ECMAScript 2025 § 12.10.1 Rules of Automatic Semicolon Insertion
 		//
 		// These keywords disallow LineTerminator before their following operand
 		// or label. They are similar enough that we can treat them all the same
@@ -552,7 +552,7 @@ class JavaScriptMinifier {
 		// continue, break, return, and yield also allow the operand or label
 		// to be omitted.
 		//
-		// See also ECMAScript 16.0:
+		// See also ECMAScript 2025:
 		// - § 14.8 The continue Statement
 		// - § 14.9 The break Statement
 		// - § 14.10 The return Statement
@@ -571,7 +571,7 @@ class JavaScriptMinifier {
 		// These keywords start constructs whose header/body shape is close enough
 		// for the minifier to treat them like "if".
 		//
-		// See also ECMAScript 16.0:
+		// See also ECMAScript 2025:
 		// - § 14.6 The if Statement
 		// - § 14.7 Iteration Statements (while, for)
 		// - § 14.11 The with Statement
@@ -584,14 +584,14 @@ class JavaScriptMinifier {
 		'switch'     => self::TYPE_IF,
 		'catch'      => self::TYPE_IF,
 
-		// ECMAScript 16.0 § 14.7.5 The for-in, for-of, and for-await-of Statements
+		// ECMAScript 2025 § 14.7.5 The for-in, for-of, and for-await-of Statements
 		'of'         => self::TYPE_BIN_OP,
 
 		// These keywords start productions whose next significant token belongs
 		// to a Statement, Expression, or Block. The minifier can treat those
 		// shapes alike.
 		//
-		// See also ECMAScript 16.0:
+		// See also ECMAScript 2025:
 		// - § 14.6 The if Statement (else)
 		// - § 14.7 Iteration Statements (do)
 		// - § 14.12 The switch Statement (case)
@@ -602,7 +602,7 @@ class JavaScriptMinifier {
 		'try'        => self::TYPE_DO,
 		'finally'    => self::TYPE_DO,
 
-		// ECMAScript 16.0 § 14.3 Declarations and the Variable Statement
+		// ECMAScript 2025 § 14.3 Declarations and the Variable Statement
 		//
 		//    LetOrConst
 		//    VariableStatement
@@ -615,13 +615,13 @@ class JavaScriptMinifier {
 		'let'        => self::TYPE_VAR,
 		'const'      => self::TYPE_VAR,
 
-		// ECMAScript 16.0 § 15.2 Function Definitions
+		// ECMAScript 2025 § 15.2 Function Definitions
 		'function'   => self::TYPE_FUNC,
 
-		// ECMAScript 16.0 § 15.3 Arrow Function Definitions
+		// ECMAScript 2025 § 15.3 Arrow Function Definitions
 		'=>'         => self::TYPE_ARROW,
 
-		// ECMAScript 16.0 § 15.7 Class Definitions
+		// ECMAScript 2025 § 15.7 Class Definitions
 		//
 		//     ClassDeclaration:
 		//         class BindingIdentifier ClassTail
@@ -635,7 +635,7 @@ class JavaScriptMinifier {
 		//
 		'class'      => self::TYPE_CLASS,
 
-		// ECMAScript 16.0 § 15.8 Async Function Definitions
+		// ECMAScript 2025 § 15.8 Async Function Definitions
 		//
 		//     AwaitExpression:
 		//         await UnaryExpression
@@ -643,32 +643,32 @@ class JavaScriptMinifier {
 		'await'      => self::TYPE_AWAIT,
 
 		// Can be one of:
-		// - Block (ECMAScript 16.0 § 14.2 Block)
-		// - ObjectLiteral (ECMAScript 16.0 § 13.2 Primary Expression)
+		// - Block (ECMAScript 2025 § 14.2 Block)
+		// - ObjectLiteral (ECMAScript 2025 § 13.2 Primary Expression)
 		'{'          => self::TYPE_BRACE_OPEN,
 		'}'          => self::TYPE_BRACE_CLOSE,
 
 		// Can be one of:
 		// - Parenthesized header after a TYPE_IF keyword or parameter list
 		//   after a TYPE_FUNC keyword.
-		// - PrimaryExpression (ECMAScript 16.0 § 13.2 Primary Expression)
-		// - CallExpression (ECMAScript 16.0 § 13.3 Left-Hand-Side Expressions)
-		// - Beginning of an ArrowFunction (ECMAScript 16.0 § 15.3 Arrow Function Definitions)
+		// - PrimaryExpression (ECMAScript 2025 § 13.2 Primary Expression)
+		// - CallExpression (ECMAScript 2025 § 13.3 Left-Hand-Side Expressions)
+		// - Beginning of an ArrowFunction (ECMAScript 2025 § 15.3 Arrow Function Definitions)
 		'('          => self::TYPE_PAREN_OPEN,
 		')'          => self::TYPE_PAREN_CLOSE,
 
 		// Can be one of:
-		// - ArrayLiteral (ECMAScript 16.0 § 13.2 Primary Expression)
-		// - ComputedPropertyName (ECMAScript 16.0 § 13.2.5 Object Initializer)
+		// - ArrayLiteral (ECMAScript 2025 § 13.2 Primary Expression)
+		// - ComputedPropertyName (ECMAScript 2025 § 13.2.5 Object Initializer)
 		'['          => self::TYPE_PAREN_OPEN,
 		']'          => self::TYPE_PAREN_CLOSE,
 
 		// Can be one of:
 		// - End of any statement
-		// - EmptyStatement (ECMAScript 16.0 § 14.4 Empty Statement)
+		// - EmptyStatement (ECMAScript 2025 § 14.4 Empty Statement)
 		';'          => self::TYPE_SEMICOLON,
 
-		// ECMAScript 16.0 § 15.8 Async Function Definitions
+		// ECMAScript 2025 § 15.8 Async Function Definitions
 		// AsyncFunctionDeclaration starts with:
 		//     async [no LineTerminator here] function
 		// AsyncMethod starts with:
@@ -2164,7 +2164,7 @@ class JavaScriptMinifier {
 		while ( $pos < $length ) {
 			// First, skip over any whitespace and line breaks
 			//
-			// ECMAScript 16.0 § 12.2 White Space
+			// ECMAScript 2025 § 12.2 White Space
 			// https://262.ecma-international.org/16.0/#sec-white-space
 			//
 			// - U+0009 Tab (\t)
@@ -2175,7 +2175,7 @@ class JavaScriptMinifier {
 			// - [Not implemented] U+FEFF Zero Width No-Break Space (ZWNBSP)
 			// - [Not implemented] Any other Unicode "Space_Separator (Zs)" code point
 			//
-			// ECMAScript 16.0 § 12.3 Line Terminators
+			// ECMAScript 2025 § 12.3 Line Terminators
 			// - U+000A Line Feed (LF, \n)
 			// - U+000D Carriage Return (CR, \r)
 			// - [Not implemented] U+2028 Line Separator (LS)
@@ -2474,7 +2474,7 @@ class JavaScriptMinifier {
 						$pos + 2 < $length &&
 						is_numeric( $s[$pos + 2] )
 					) {
-						// ECMAScript 16.0 § 12.8 Punctuators
+						// ECMAScript 2025 § 12.8 Punctuators
 						// OptionalChainingPunctuator is not recognised before a decimal digit.
 					} elseif ( $submap2 === 2 ) {
 						// Optimization: Shortcut for the common case of an unambiguous 2-char punctuation token
